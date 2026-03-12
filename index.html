@@ -1,0 +1,530 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>长沙三天两夜游 -  interactive 地图</title>
+
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" 
+          integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" 
+          crossorigin=""/>
+
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" 
+            integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" 
+            crossorigin=""></script>
+
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background: #f0f2f5;
+            overflow-x: hidden;
+        }
+
+        /* 头部 */
+        .header {
+            background: linear-gradient(135deg, #ff6b6b 0%, #ee5a6f 100%);
+            color: white;
+            padding: 15px 20px;
+            text-align: center;
+            position: sticky;
+            top: 0;
+            z-index: 1000;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .header h1 { font-size: 24px; margin-bottom: 5px; }
+        .header p { font-size: 13px; opacity: 0.9; }
+
+        /* 地图容器 */
+        #map {
+            height: 60vh;
+            width: 100%;
+            z-index: 1;
+        }
+
+        /* 控制面板 */
+        .controls {
+            background: white;
+            padding: 15px;
+            box-shadow: 0 -2px 10px rgba(0,0,0,0.1);
+            position: relative;
+            z-index: 2;
+        }
+
+        .day-tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+            overflow-x: auto;
+            padding-bottom: 5px;
+        }
+
+        .day-tab {
+            flex: 1;
+            min-width: 100px;
+            padding: 12px;
+            border: none;
+            border-radius: 12px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s;
+            text-align: center;
+            font-size: 14px;
+        }
+
+        .day-tab.active {
+            transform: scale(1.05);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+        }
+
+        .tab-day1 { background: linear-gradient(135deg, #4ecdc4, #44a08d); color: white; }
+        .tab-day2 { background: linear-gradient(135deg, #667eea, #764ba2); color: white; }
+        .tab-day3 { background: linear-gradient(135deg, #f093fb, #f5576c); color: white; }
+        .tab-all { background: #495057; color: white; }
+
+        .day-tab:not(.active) { opacity: 0.6; }
+
+        /* 景点列表 */
+        .spot-list {
+            max-height: 25vh;
+            overflow-y: auto;
+            background: #f8f9fa;
+            border-radius: 12px;
+            padding: 10px;
+        }
+
+        .spot-item {
+            background: white;
+            margin-bottom: 8px;
+            padding: 12px;
+            border-radius: 10px;
+            border-left: 4px solid;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+        }
+
+        .spot-info { flex: 1; }
+        .spot-name { font-weight: bold; font-size: 15px; margin-bottom: 3px; }
+        .spot-time { font-size: 12px; color: #6c757d; }
+        .spot-tag { 
+            display: inline-block; 
+            font-size: 11px; 
+            padding: 2px 6px; 
+            border-radius: 4px; 
+            margin-top: 4px;
+            background: #e9ecef;
+            color: #495057;
+        }
+
+        .spot-actions {
+            display: flex;
+            gap: 5px;
+        }
+
+        .btn {
+            padding: 6px 12px;
+            border: none;
+            border-radius: 6px;
+            font-size: 12px;
+            cursor: pointer;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 3px;
+        }
+
+        .btn-nav {
+            background: #007bff;
+            color: white;
+        }
+
+        .btn-detail {
+            background: #6c757d;
+            color: white;
+        }
+
+        /* 自定义弹窗样式 */
+        .custom-popup {
+            font-family: inherit;
+            min-width: 200px;
+        }
+        .popup-title {
+            font-weight: bold;
+            font-size: 16px;
+            margin-bottom: 8px;
+            color: #212529;
+        }
+        .popup-content {
+            font-size: 13px;
+            color: #6c757d;
+            line-height: 1.5;
+            margin-bottom: 10px;
+        }
+        .popup-nav {
+            display: flex;
+            gap: 8px;
+        }
+        .popup-nav a {
+            flex: 1;
+            text-align: center;
+            padding: 8px;
+            border-radius: 6px;
+            text-decoration: none;
+            font-size: 12px;
+            font-weight: bold;
+        }
+        .nav-amap { background: #284de0; color: white; }
+        .nav-baidu { background: #2932e1; color: white; }
+
+        /* 图例 */
+        .legend-panel {
+            position: absolute;
+            top: 80px;
+            right: 10px;
+            background: rgba(255,255,255,0.95);
+            padding: 10px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            z-index: 1000;
+            font-size: 12px;
+        }
+        .legend-title { font-weight: bold; margin-bottom: 5px; }
+        .legend-item { display: flex; align-items: center; margin: 3px 0; }
+        .legend-color { width: 12px; height: 12px; border-radius: 50%; margin-right: 6px; }
+
+        /* 统计信息 */
+        .stats-bar {
+            display: flex;
+            justify-content: space-around;
+            padding: 10px;
+            background: white;
+            margin-bottom: 10px;
+            border-radius: 8px;
+            font-size: 12px;
+        }
+        .stat-item { text-align: center; }
+        .stat-num { font-size: 18px; font-weight: bold; color: #ff6b6b; }
+        .stat-label { color: #6c757d; margin-top: 2px; }
+
+        /* 响应式 */
+        @media (max-width: 768px) {
+            #map { height: 50vh; }
+            .spot-list { max-height: 30vh; }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🗺️ 长沙三天两夜游 · 实景地图</h1>
+        <p>点击标记查看详情 | 一键跳转导航</p>
+    </div>
+
+    <div id="map"></div>
+
+    <!-- 图例 -->
+    <div class="legend-panel">
+        <div class="legend-title">路线</div>
+        <div class="legend-item">
+            <div class="legend-color" style="background:#4ecdc4"></div>
+            <span>Day1 历史+夜景</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-color" style="background:#667eea"></div>
+            <span>Day2 双山游</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-color" style="background:#f093fb"></div>
+            <span>Day3 文化半日</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-color" style="background:#ff6b6b"></div>
+            <span>住宿中心</span>
+        </div>
+    </div>
+
+    <div class="controls">
+        <!-- 统计 -->
+        <div class="stats-bar">
+            <div class="stat-item">
+                <div class="stat-num">12</div>
+                <div class="stat-label">景点</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-num">3</div>
+                <div class="stat-label">天</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-num">2</div>
+                <div class="stat-label">夜</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-num">5km</div>
+                <div class="stat-label">日均步行</div>
+            </div>
+        </div>
+
+        <!-- 天数切换 -->
+        <div class="day-tabs">
+            <button class="day-tab tab-all active" onclick="showDay('all')">📍 全部</button>
+            <button class="day-tab tab-day1" onclick="showDay('day1')">Day1 历史</button>
+            <button class="day-tab tab-day2" onclick="showDay('day2')">Day2 双山</button>
+            <button class="day-tab tab-day3" onclick="showDay('day3')">Day3 文化</button>
+        </div>
+
+        <!-- 景点列表 -->
+        <div class="spot-list" id="spotList">
+            <!-- 动态生成 -->
+        </div>
+    </div>
+
+    <script>
+        // 景点数据（真实坐标）
+        const spots = [
+            // Day1 - 历史+夜景
+            { id: 1, day: 'day1', name: '五一广场', time: '住宿中心', 
+              lat: 28.1938, lng: 112.9764, 
+              desc: '地铁1/2号线换乘站，IFS国金中心可寄存行李',
+              tags: ['交通枢纽', '行李寄存'],
+              color: '#ff6b6b' },
+            { id: 2, day: 'day1', name: '西园北里', time: '09:00-12:00',
+              lat: 28.2015, lng: 112.9703,
+              desc: '560米历史步道，左宗棠祠、李觉公馆，比太平街安静',
+              tags: ['历史街区', '地铁1号线培元桥'],
+              color: '#4ecdc4' },
+            { id: 3, day: 'day1', name: '潮宗街', time: '顺路游览',
+              lat: 28.2034, lng: 112.9745,
+              desc: '文艺古着店聚集地，citywalk打卡点',
+              tags: ['文艺', '步行15分钟'],
+              color: '#4ecdc4' },
+            { id: 4, day: 'day1', name: 'IFS国金中心', time: '14:30-15:30',
+              lat: 28.1938, lng: 112.9764,
+              desc: '7楼KAWS雕塑，2025年新增空中花园',
+              tags: ['网红打卡', '免费'],
+              color: '#4ecdc4' },
+            { id: 5, day: 'day1', name: '黄兴路步行街', time: '15:30-17:00',
+              lat: 28.1912, lng: 112.9756,
+              desc: '巨型铜像、长沙灯牌，茶颜悦色、黑色经典',
+              tags: ['美食', '购物'],
+              color: '#4ecdc4' },
+            { id: 6, day: 'day1', name: '超级文和友', time: '17:00-18:30',
+              lat: 28.1901, lng: 112.9789,
+              desc: '海信广场店，80年代复古场景，免费拍照',
+              tags: ['复古', '拍照圣地'],
+              color: '#4ecdc4' },
+            { id: 7, day: 'day1', name: '杜甫江阁', time: '19:00-22:30',
+              lat: 28.1856, lng: 112.9798,
+              desc: '亮灯时间19:00-22:30，周五-周日灯光秀',
+              tags: ['夜景', '门票11元'],
+              color: '#4ecdc4' },
+            { id: 8, day: 'day1', name: '坡子街/火宫殿', time: '晚餐',
+              lat: 28.1878, lng: 112.9782,
+              desc: '百年老字号，臭豆腐、糖油粑粑、剁椒鱼头',
+              tags: ['美食街', '人均30元'],
+              color: '#4ecdc4' },
+
+            // Day2 - 双山
+            { id: 9, day: 'day2', name: '橘子洲', time: '08:00-12:00',
+              lat: 28.1712, lng: 112.9598,
+              desc: '青年毛泽东雕塑，观光小火车40元往返，需预约',
+              tags: ['5A景区', '地铁2号线直达'],
+              color: '#667eea' },
+            { id: 10, day: 'day2', name: '湖南大学', time: '12:00-14:00',
+              lat: 28.1803, lng: 112.9456,
+              desc: '登高路美食街，老头子糖油粑粑、天马牛肉饼',
+              tags: ['美食街', '地铁4号线'],
+              color: '#667eea' },
+            { id: 11, day: 'day2', name: '岳麓书院', time: '14:00-15:30',
+              lat: 28.1845, lng: 112.9432,
+              desc: '中国四大书院，惟楚有才对联，门票40元',
+              tags: ['世界文化遗产', '古建筑'],
+              color: '#667eea' },
+            { id: 12, day: 'day2', name: '爱晚亭', time: '15:30-16:00',
+              lat: 28.1856, lng: 112.9415,
+              desc: '杜牧诗址，从书院后门步行5分钟',
+              tags: ['免费', '枫叶'],
+              color: '#667eea' },
+            { id: 13, day: 'day2', name: '岳麓山滑道', time: '16:00前',
+              lat: 28.1923, lng: 112.9389,
+              desc: '35元/人，雨天关闭，16:00停运',
+              tags: ['刺激', '下至东门'],
+              color: '#667eea' },
+
+            // Day3 - 文化半日（三选一）
+            { id: 14, day: 'day3', name: '湖南省博物馆', time: '09:00-12:00',
+              lat: 28.2123, lng: 112.9901,
+              desc: '辛追夫人、素纱襌衣，需预约，周一闭馆',
+              tags: ['必去', '地铁6号线'],
+              color: '#f093fb' },
+            { id: 15, day: 'day3', name: '古开福寺', time: '备选方案',
+              lat: 28.2167, lng: 112.9856,
+              desc: '地铁1号线4站直达，门票10元，数罗汉',
+              tags: ['祈福', '地铁直达'],
+              color: '#f093fb' },
+            { id: 16, day: 'day3', name: '谢子龙影像馆', time: '备选方案',
+              lat: 28.1167, lng: 112.9234,
+              desc: '地铁3号线洋湖湿地站，建筑设计感强',
+              tags: ['文艺', '拍照'],
+              color: '#f093fb' }
+        ];
+
+        // 初始化地图（以五一广场为中心）
+        const map = L.map('map').setView([28.1938, 112.9764], 13);
+
+        // 添加地图图层（使用CartoDB Voyager，清晰美观）
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+            subdomains: 'abcd',
+            maxZoom: 20
+        }).addTo(map);
+
+        // 存储所有标记
+        const markers = {};
+        const lines = {};
+
+        // 自定义图标
+        function createIcon(color, emoji) {
+            return L.divIcon({
+                className: 'custom-marker',
+                html: `<div style="background-color:${color};width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:white;font-size:20px;border:3px solid white;box-shadow:0 3px 10px rgba(0,0,0,0.3);">${emoji}</div>`,
+                iconSize: [36, 36],
+                iconAnchor: [18, 18],
+                popupAnchor: [0, -20]
+            });
+        }
+
+        // 添加标记
+        spots.forEach(spot => {
+            const emoji = spot.day === 'day1' ? '📍' : spot.day === 'day2' ? '⛰️' : spot.day === 'day3' ? '🏛️' : '🏨';
+            const marker = L.marker([spot.lat, spot.lng], {
+                icon: createIcon(spot.color, emoji)
+            }).addTo(map);
+
+            // 生成导航链接（scheme协议）
+            const amapUrl = `https://uri.amap.com/navigation?to=${spot.lng},${spot.lat},${encodeURIComponent(spot.name)}&mode=car&policy=1`;
+            const baiduUrl = `baidumap://map/direction?origin=latlng:28.1938,112.9764|name:五一广场&destination=latlng:${spot.lat},${spot.lng}|name:${encodeURIComponent(spot.name)}&mode=driving`;
+            const webBaidu = `https://map.baidu.com/dir/${spot.lng},${spot.lat}/${spot.name}`;
+
+            const popupContent = `
+                <div class="custom-popup">
+                    <div class="popup-title">${spot.name}</div>
+                    <div class="popup-content">
+                        <strong>⏰ ${spot.time}</strong><br>
+                        ${spot.desc}<br>
+                        ${spot.tags.map(t => `<span style="display:inline-block;background:#f0f0f0;padding:2px 6px;border-radius:4px;font-size:11px;margin:2px;">${t}</span>`).join('')}
+                    </div>
+                    <div class="popup-nav">
+                        <a href="${amapUrl}" target="_blank" class="nav-amap">🚗 高德导航</a>
+                        <a href="${webBaidu}" target="_blank" class="nav-baidu">🚕 百度地图</a>
+                    </div>
+                </div>
+            `;
+
+            marker.bindPopup(popupContent);
+            markers[spot.id] = marker;
+        });
+
+        // 绘制路线
+        function drawRoute(day, color) {
+            const daySpots = spots.filter(s => s.day === day).sort((a,b) => a.id - b.id);
+            const latlngs = daySpots.map(s => [s.lat, s.lng]);
+
+            if (latlngs.length > 1) {
+                const polyline = L.polyline(latlngs, {
+                    color: color,
+                    weight: 4,
+                    opacity: 0.7,
+                    dashArray: '10, 10'
+                }).addTo(map);
+                return polyline;
+            }
+            return null;
+        }
+
+        // 绘制所有路线
+        lines.day1 = drawRoute('day1', '#4ecdc4');
+        lines.day2 = drawRoute('day2', '#667eea');
+        lines.day3 = drawRoute('day3', '#f093fb');
+
+        // 显示特定天数
+        function showDay(day) {
+            // 更新按钮状态
+            document.querySelectorAll('.day-tab').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            event.target.classList.add('active');
+
+            // 显示/隐藏标记
+            spots.forEach(spot => {
+                if (day === 'all' || spot.day === day) {
+                    map.addLayer(markers[spot.id]);
+                } else {
+                    map.removeLayer(markers[spot.id]);
+                }
+            });
+
+            // 显示/隐藏路线
+            Object.keys(lines).forEach(key => {
+                if (lines[key]) {
+                    if (day === 'all' || key === day) {
+                        map.addLayer(lines[key]);
+                    } else {
+                        map.removeLayer(lines[key]);
+                    }
+                }
+            });
+
+            // 更新列表
+            updateSpotList(day);
+
+            // 调整地图视角
+            if (day !== 'all') {
+                const daySpots = spots.filter(s => s.day === day);
+                const group = new L.featureGroup(daySpots.map(s => markers[s.id]));
+                map.fitBounds(group.getBounds().pad(0.2));
+            } else {
+                map.setView([28.1938, 112.9764], 13);
+            }
+        }
+
+        // 更新景点列表
+        function updateSpotList(day) {
+            const list = document.getElementById('spotList');
+            const filtered = day === 'all' ? spots : spots.filter(s => s.day === day);
+
+            list.innerHTML = filtered.map(spot => {
+                const amapUrl = `https://uri.amap.com/navigation?to=${spot.lng},${spot.lat},${encodeURIComponent(spot.name)}&mode=car&policy=1`;
+                const borderColor = spot.day === 'day1' ? '#4ecdc4' : spot.day === 'day2' ? '#667eea' : spot.day === 'day3' ? '#f093fb' : '#ff6b6b';
+
+                return `
+                    <div class="spot-item" style="border-color: ${borderColor}">
+                        <div class="spot-info">
+                            <div class="spot-name">${spot.day==='day1'?'📍':spot.day==='day2'?'⛰️':spot.day==='day3'?'🏛️':'🏨'} ${spot.name}</div>
+                            <div class="spot-time">⏰ ${spot.time}</div>
+                            ${spot.tags.map(t => `<span class="spot-tag">${t}</span>`).join('')}
+                        </div>
+                        <div class="spot-actions">
+                            <a href="${amapUrl}" target="_blank" class="btn btn-nav">🚗 导航</a>
+                            <button class="btn btn-detail" onclick="markers[${spot.id}].openPopup(); map.panTo([${spot.lat}, ${spot.lng}])">📍 定位</button>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        // 初始化显示全部
+        updateSpotList('all');
+
+        // 定位到当前位置按钮
+        L.control.locate({
+            position: 'topleft',
+            strings: { title: "定位到我的位置" },
+            locateOptions: { enableHighAccuracy: true }
+        }).addTo(map);
+
+    </script>
+</body>
+</html>
